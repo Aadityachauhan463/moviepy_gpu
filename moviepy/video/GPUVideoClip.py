@@ -169,4 +169,4 @@ class GPUCompositeVideoClip(CompositeVideoClip):
             
             return frame
             
-        return VideoClip(frame_function=cpu_frame_func, duration=self.duration)
+        return VideoClip(frame_function=cpu_frame_function, duration=self.duration)
