@@ -1,5 +1,6 @@
 import numpy as np
 import cupy as cp
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 
 # ---------------------------------------------------------
 # FIX: 'videoclip' -> 'video.VideoClip'
@@ -140,3 +141,32 @@ class GPUImageClip(GPUVideoClip):
                 is_mask=True,
                 duration=temp_clip.duration
             )
+
+
+class GPUCompositeVideoClip(CompositeVideoClip):
+    """
+    A CompositeVideoClip that understands GPU clips.
+    It inherits all the logic from standard MoviePy, but adds the ability
+    to export back to CPU.
+    """
+    def __init__(self, clips, size=None, bg_color=None, is_mask=False, **kwargs):
+        super().__init__(clips, size, bg_color, is_mask, **kwargs)
+
+    def to_cpu(self):
+        """
+        Converts the GPU composite result back to a standard CPU clip 
+        for FFmpeg writing.
+        """
+        def cpu_frame_function(t):
+            # Get the frame (which comes out as a CuPy array because children are GPU)
+            frame = self.get_frame(t)
+            
+            # If it's a CuPy array, convert to NumPy
+            if hasattr(frame, 'get'): 
+                return frame.get() # .get() is the CuPy way to move to CPU
+            elif isinstance(frame, cp.ndarray):
+                return cp.asnumpy(frame)
+            
+            return frame
+            
+        return VideoClip(frame_function=cpu_frame_func, duration=self.duration)
