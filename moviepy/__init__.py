@@ -42,6 +42,7 @@ AudioClip.display_in_notebook = display_in_notebook
 # Importing with `from moviepy import *` will only import these names
 __all__ = [
     "__version__",
+    "GPUVideoClip"
     "VideoClip",
     "DataVideoClip",
     "UpdatedVideoClip",
