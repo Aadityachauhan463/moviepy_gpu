@@ -43,10 +43,16 @@ from moviepy.video.GPUVideoClip import (
 GPUVideoClip, 
 GPUImageClip,
 GPUCompositeVideoClip,
-GPUVideoFileClip) 
+GPUVideoFileClip,
+GPUTextClip,
+GPUColorClip)
+
+
 # Importing with `from moviepy import *` will only import these names
 __all__ = [
     "__version__",
+    "GPUTextClip",
+    "GPUColorClip",
     "GPUCompositeVideoClip",
     "GPUVideoFileClip",
     "GPUVideoClip",
