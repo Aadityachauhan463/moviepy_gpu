@@ -1,8 +1,17 @@
 import numpy as np
 import cupy as cp
-from moviepy.videoclip import VideoClip, ImageClip
 
+# ---------------------------------------------------------
+# FIX: 'videoclip' -> 'video.VideoClip'
+# ---------------------------------------------------------
+from moviepy.video.VideoClip import VideoClip, ImageClip
+
+# This one is correct (tools.py is at moviepy/tools.py)
 from moviepy.tools import compute_position
+
+# If you are using the effects (resize/rotate) we discussed earlier, 
+# you will also need this:
+from cupyx.scipy.ndimage import zoom, rotate
 
 class GPUVideoClip(VideoClip):
     """
