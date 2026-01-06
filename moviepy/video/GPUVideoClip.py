@@ -170,3 +170,29 @@ class GPUCompositeVideoClip(CompositeVideoClip):
             return frame
             
         return VideoClip(frame_function=cpu_frame_function, duration=self.duration)
+
+class GPUVideoFileClip(GPUVideoClip):
+    def __init__(self, filename, **kwargs):
+        # 1. The Engine Room (CPU)
+        # We start a standard MoviePy clip to handle the hard work of 
+        # talking to FFmpeg, reading FPS, and duration.
+        self.cpu_clip = VideoFileClip(filename, **kwargs)
+        
+        # 2. The Bridge (The Frame Function)
+        def gpu_frame_func(t):
+            # A. Ask CPU clip to get the frame (NumPy Array)
+            # This triggers FFmpeg to decode the video at time 't'
+            frame_cpu = self.cpu_clip.get_frame(t)
+            
+            # B. The Transfer (RAM -> VRAM)
+            # This moves the data across the PCIe bus to the GPU.
+            # Now it is a CuPy array.
+            frame_gpu = cp.asarray(frame_cpu)
+            
+            return frame_gpu
+            
+        # 3. Initialization
+        # We tell the parent GPUVideoClip: "Here is your frame function.
+        # Don't worry about where it comes from, I promise it returns GPU data."
+        super().__init__(frame_function=gpu_frame_func, 
+                         duration=self.cpu_clip.duration)
