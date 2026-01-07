@@ -39,7 +39,9 @@ VideoClip.display_in_notebook = display_in_notebook
 AudioClip.display_in_notebook = display_in_notebook
 
 # Gpu class
-from moviepy.video.GPUVideoClip import (
+gpu_true = False
+if gpu_true:
+    from moviepy.video.GPUVideoClip import (
 GPUVideoClip, 
 GPUImageClip,
 GPUCompositeVideoClip,
@@ -51,15 +53,9 @@ GPUColorClip)
 # Importing with `from moviepy import *` will only import these names
 __all__ = [
     "__version__",
-    "GPUTextClip",
-    "GPUColorClip",
-    "GPUCompositeVideoClip",
-    "GPUVideoFileClip",
-    "GPUVideoClip",
     "VideoClip",
     "DataVideoClip",
     "UpdatedVideoClip",
-    "GPUImageClip",
     "ImageClip",
     "ColorClip",
     "TextClip",
