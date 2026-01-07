@@ -41,6 +41,33 @@ from moviepy.video.fx.Rotate import Rotate
 from moviepy.video.io.ffmpeg_writer import ffmpeg_write_video
 from moviepy.video.io.gif_writers import write_gif_with_imageio
 
+class Keyframer:
+    """Helper to interpolate values over time."""
+    def __init__(self, keyframes):
+        # keyframes: list of tuples [(time, value), ...]
+        # Sort by time
+        keyframes.sort(key=lambda x: x[0])
+        self.times = np.array([k[0] for k in keyframes])
+        
+        # Determine if value is a scalar (opacity/angle) or vector (position x,y)
+        first_val = keyframes[0][1]
+        if isinstance(first_val, (tuple, list, np.ndarray)):
+            self.is_vector = True
+            self.values = np.array([k[1] for k in keyframes])
+        else:
+            self.is_vector = False
+            self.values = np.array([k[1] for k in keyframes])
+
+    def get_value(self, t):
+        if self.is_vector:
+            # Interpolate X and Y separately
+            result = []
+            for dim in range(self.values.shape[1]):
+                val = np.interp(t, self.times, self.values[:, dim])
+                result.append(val)
+            return tuple(result)
+        else:
+            return np.interp(t, self.times, self.values)
 
 class VideoClip(Clip):
     """Base class for video clips.
@@ -637,6 +664,131 @@ class VideoClip(Clip):
             clip=self, fps=fps, audio_flag=audio_flag, video_flag=video_flag
         )
 
+    # --------------------------------------------------------------
+    # KEYFRAME ANIMATION METHODS (CPU)
+    # --------------------------------------------------------------
+
+    def set_position_keyframes(self, keyframes):
+        """
+        Animates position over time.
+        
+        Parameters
+        ----------
+        keyframes : list
+          A list of tuples: [(time, x, y), (time, x, y), ...]
+          
+        Example
+        -------
+        clip.set_position_keyframes([(0, 0, 0), (5, 500, 500)])
+        """
+        k = Keyframer([(t, (x, y)) for t, x, y in keyframes])
+
+        def pos_func(t):
+            res = k.get_value(t)
+            # Position must be integers or standard floats
+            return (int(res[0]), int(res[1]))
+
+        return self.with_position(pos_func)
+
+    def set_opacity_keyframes(self, keyframes):
+        """
+        Animates opacity (fade in/out) over time.
+        
+        Parameters
+        ----------
+        keyframes : list
+          A list of tuples: [(time, opacity), ...]
+          Opacity is 0.0 to 1.0.
+        """
+        k = Keyframer(keyframes)
+        
+        # We need a mask to change opacity. If none, create a full opaque one.
+        if self.mask is None:
+            self = self.add_mask() # Uses standard MoviePy logic to add mask
+
+        def filter(get_mask, t):
+            # Get current opacity value
+            op = k.get_value(t)
+            # Multiply existing mask by opacity
+            return get_mask(t) * op
+
+        # Apply transformation to the mask only
+        new_clip = self.copy()
+        new_clip.mask = self.mask.transform(filter)
+        return new_clip
+
+    def set_scale_keyframes(self, keyframes):
+        """
+        Animates scale (zoom) over time.
+        WARNING: This is slow on CPU.
+        
+        Parameters
+        ----------
+        keyframes : list
+          A list of tuples: [(time, scale_ratio), ...]
+        """
+        from moviepy.video.fx.Resize import Resize
+        k = Keyframer(keyframes)
+
+        def filter(get_frame, t):
+            scale = k.get_value(t)
+            # We use the internal resize logic directly on the frame array
+            # This requires 'imageio' or 'PIL' logic usually handled by vfx.Resize
+            # But here we call the effect manually per frame.
+            
+            # NOTE: vfx.Resize is an Effect class. We need the underlying function.
+            # MoviePy v2 uses standard resize logic.
+            # We wrap it in a lambda that calls Resize on a single frame.
+            
+            frame = get_frame(t)
+            
+            # Use standard PIL resize via MoviePy's Resize effect
+            # We create a temporary Resize effect just to use its logic? 
+            # No, that's inefficient.
+            
+            # Efficient way using standard MoviePy tools:
+            # We utilize the standard 'transform' method which expects a function
+            # that takes an image and returns an image.
+            
+            # We need to import the resize tool
+            from moviepy.video.fx.Resize import resize_frame
+            return resize_frame(frame, scale)
+
+        # Apply to video and mask automatically via transform
+        # Note: We must ensure resize_frame is imported or available
+        # MoviePy usually hides it inside the Resize class. 
+        # A safer bet is relying on PIL directly here for the CPU implementation:
+        from PIL import Image
+        
+        def resize_pil(frame_arr, scale):
+            h, w = frame_arr.shape[:2]
+            new_size = (int(w*scale), int(h*scale))
+            img = Image.fromarray(frame_arr)
+            img = img.resize(new_size, Image.BILINEAR)
+            return np.array(img)
+
+        return self.transform(lambda get_frame, t: resize_pil(get_frame(t), k.get_value(t)))
+
+    def set_rotate_keyframes(self, keyframes):
+        """
+        Animates rotation over time.
+        WARNING: This is slow on CPU.
+        
+        Parameters
+        ----------
+        keyframes : list
+          A list of tuples: [(time, degrees), ...]
+        """
+        k = Keyframer(keyframes)
+        from PIL import Image
+
+        def rotate_pil(frame_arr, angle):
+            img = Image.fromarray(frame_arr)
+            # expand=True prevents cropping corners
+            img = img.rotate(angle, expand=True, resample=Image.BICUBIC)
+            return np.array(img)
+
+        return self.transform(lambda get_frame, t: rotate_pil(get_frame(t), k.get_value(t)))
     # -----------------------------------------------------------------
     # F I L T E R I N G
 
