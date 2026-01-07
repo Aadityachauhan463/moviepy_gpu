@@ -692,24 +692,31 @@ class VideoClip(Clip):
 
     def set_opacity_keyframes(self, keyframes):
         """
-        Animates opacity (fade in/out) over time.
-        
-        Parameters
-        ----------
-        keyframes : list
-          A list of tuples: [(time, opacity), ...]
-          Opacity is 0.0 to 1.0.
+        Animates opacity (fade in/out).
+        Args: keyframes: List of tuples [(time, opacity_0_to_1), ...]
         """
         k = Keyframer(keyframes)
-        
-        # We need a mask to change opacity. If none, create a full opaque one.
+
+        # FIX: Manually create a white mask if none exists
         if self.mask is None:
-            self = self.add_mask() # Uses standard MoviePy logic to add mask
+            # 1. Define a function that returns a white screen (1.0)
+            def make_white_mask(t):
+                return np.ones((self.h, self.w), dtype=np.float32)
+
+            # 2. Create the mask clip
+            # We use the base VideoClip class (which is available here)
+            white_mask = VideoClip(is_mask=True, frame_function=make_white_mask)
+
+            # 3. Sync duration
+            if self.duration is not None:
+                white_mask = white_mask.with_duration(self.duration)
+
+            # 4. Attach it
+            self = self.with_mask(white_mask)
 
         def filter(get_mask, t):
-            # Get current opacity value
             op = k.get_value(t)
-            # Multiply existing mask by opacity
+            # Modify the existing mask
             return get_mask(t) * op
 
         # Apply transformation to the mask only
@@ -717,6 +724,8 @@ class VideoClip(Clip):
         new_clip.mask = self.mask.transform(filter)
         return new_clip
 
+
+        
     def set_scale_keyframes(self, keyframes):
         """
         Animates scale (zoom) over time.
